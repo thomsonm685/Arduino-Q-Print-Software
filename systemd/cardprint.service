@@ -1,0 +1,19 @@
+[Unit]
+Description=Fargo card printer web console
+After=network-online.target cups.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=lp
+WorkingDirectory=__APPDIR__
+Environment="CARDPRINT_PRINTER=Fargo-DTC-1250e"
+Environment="CARDPRINT_HOST=0.0.0.0"
+Environment="CARDPRINT_PORT=8080"
+ExecStart=__APPDIR__/.venv/bin/python -m app.main
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

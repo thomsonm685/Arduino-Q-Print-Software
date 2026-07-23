@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Card Printer</title>
+<style>
+  :root {
+    --ink:      #101219;
+    --panel:    #171a23;
+    --panel-2:  #1e2230;
+    --edge:     #2b3040;
+    --edge-hot: #3d4459;
+    --text:     #d5d9e4;
+    --muted:    #7a8296;
+    --stock:    #f1ede2;
+    --y: #f2c118;
+    --m: #d61f7c;
+    --c: #1fa5d8;
+    --k: #0d0f14;
+    --ok: #4bbf87;
+    --warn: #e0952c;
+    --bad: #e05252;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "DejaVu Sans Mono", Menlo, monospace;
+    --sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Ribbon strip: the YMCK panel order of the actual ribbon, used as the
+     application's masthead and as run progress. */
+  .ribbon {
+    display: flex;
+    height: 4px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .ribbon span { flex: 1; opacity: .32; transition: opacity .4s ease; }
+  .ribbon span:nth-child(1) { background: var(--y); }
+  .ribbon span:nth-child(2) { background: var(--m); }
+  .ribbon span:nth-child(3) { background: var(--c); }
+  .ribbon span:nth-child(4) { background: #6d7488; }
+  .ribbon.live span { animation: pulse 1.6s ease-in-out infinite; }
+  .ribbon.live span:nth-child(2) { animation-delay: .2s; }
+  .ribbon.live span:nth-child(3) { animation-delay: .4s; }
+  .ribbon.live span:nth-child(4) { animation-delay: .6s; }
+  @keyframes pulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 18px 24px 14px;
+    border-bottom: 1px solid var(--edge);
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    margin: 0;
+  }
+  .machine {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .state {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .dot.idle { background: var(--ok); }
+  .dot.printing { background: var(--y); }
+  .dot.disabled, .dot.unknown { background: var(--bad); }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(340px, 1fr) minmax(320px, 420px);
+    gap: 24px;
+    padding: 24px;
+    align-items: start;
+    max-width: 1400px;
+  }
+
+  section { margin-bottom: 24px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  /* --- Card stage --- */
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: var(--radius);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .card-frame {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    aspect-ratio: 85.5 / 54;
+    background: var(--stock);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 12px 32px rgba(0,0,0,.5), 0 0 0 1px var(--edge-hot);
+  }
+  .card-frame img { width: 100%; height: 100%; object-fit: fill; display: block; }
+  .card-frame.empty { display: grid; place-items: center; }
+  .card-frame.empty img { display: none; }
+  .drop-hint {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #8a8578;
+    text-align: center;
+    padding: 0 24px;
+    line-height: 1.9;
+  }
+  .card-frame:not(.empty) .drop-hint { display: none; }
+  .card-frame.dragging { outline: 2px dashed var(--m); outline-offset: 3px; }
+
+  /* Trim guide: the printer loses a sliver on the left and bottom, so the
+     guide is offset to match what actually survives. */
+  .trim {
+    position: absolute;
+    inset: 2.2% 1.4% 2.6% 2.4%;
+    border: 1px dashed rgba(214,31,124,.75);
+    pointer-events: none;
+  }
+  .trim::after {
+    content: "TRIM";
+    position: absolute;
+    top: -1px; right: -1px;
+    background: rgba(214,31,124,.85);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: .14em;
+    padding: 1px 4px;
+  }
+  .card-frame.empty .trim, .no-trim .trim { display: none; }
+
+  .stage-meta {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .06em;
+  }
+
+  .density { width: 100%; }
+  .meter { height: 3px; background: var(--edge); border-radius: 2px; overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .3s ease; }
+  .meter.warn i { background: var(--warn); }
+  .density p { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+  .density.warn p { color: var(--warn); }
+
+  /* --- Controls --- */
+  .group {
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+  .row:last-child { margin-bottom: 0; }
+  .row label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex: 0 0 92px;
+  }
+  .row .value {
+    font-family: var(--mono);
+    font-size: 12px;
+    flex: 0 0 52px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] { flex: 1; accent-color: var(--m); background: transparent; }
+  input[type="number"], input[type="text"], select {
+    background: var(--panel-2);
+    border: 1px solid var(--edge);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: var(--radius);
+    flex: 1;
+    min-width: 0;
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--c);
+    outline-offset: 1px;
+  }
+
+  button {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    background: var(--panel-2);
+    border: 1px solid var(--edge-hot);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary {
+    background: var(--m);
+    border-color: var(--m);
+    color: #fff;
+    font-weight: 600;
+    width: 100%;
+    padding: 13px;
+    letter-spacing: .14em;
+  }
+  button.primary:hover:not(:disabled) { background: #ec2f8c; }
+  button.ghost { background: transparent; }
+  button.small { padding: 5px 9px; font-size: 11px; }
+
+  details.options summary {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+  }
+  details.options summary::-webkit-details-marker { display: none; }
+  details.options summary::after { content: "+"; }
+  details.options[open] summary::after { content: "−"; }
+  details.options[open] summary { margin-bottom: 14px; }
+  .opt-search { width: 100%; margin-bottom: 12px; }
+  .opt-list { max-height: 320px; overflow-y: auto; padding-right: 4px; }
+  .opt-list .row label { flex: 0 0 148px; text-transform: none; letter-spacing: .04em; font-size: 11px; }
+
+  .cmd {
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--muted);
+    background: var(--ink);
+    border: 1px solid var(--edge);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    word-break: break-all;
+    margin-top: 12px;
+  }
+  .cmd b { color: var(--c); font-weight: 400; }
+
+  /* --- Queue --- */
+  .job {
+    border: 1px solid var(--edge);
+    border-left: 2px solid var(--edge-hot);
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .job.printing { border-left-color: var(--y); }
+  .job.awaiting_confirmation { border-left-color: var(--c); }
+  .job.confirmed { border-left-color: var(--ok); }
+  .job.failed, .job.cancelled { border-left-color: var(--bad); }
+  .job-head { display: flex; align-items: baseline; gap: 10px; font-family: var(--mono); font-size: 12px; }
+  .job-head .name { color: var(--text); }
+  .job-head .count { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .job-state { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .job-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .job-ask { font-size: 12px; color: var(--c); margin: 10px 0 0; line-height: 1.5; }
+  .empty-note { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  .toast {
+    position: fixed;
+    bottom: 20px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel-2);
+    border: 1px solid var(--edge-hot);
+    border-left: 3px solid var(--m);
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    max-width: 520px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.6);
+    z-index: 50;
+  }
+  .toast.hidden { display: none; }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="ribbon" id="ribbon"><span></span><span></span><span></span><span></span></div>
+
+<header>
+  <h1>Card Printer</h1>
+  <span class="machine" id="machine">—</span>
+  <div class="state"><span class="dot" id="dot"></span><span id="stateText">checking</span></div>
+</header>
+
+<main>
+  <div>
+    <section>
+      <p class="eyebrow"><span>Card</span><span id="canvasNote">CR80 · 300 dpi</span></p>
+      <div class="stage">
+        <div class="card-frame empty" id="frame">
+          <img id="preview" alt="Print preview" />
+          <div class="trim"></div>
+          <p class="drop-hint">Drop artwork here<br />or choose a file below</p>
+        </div>
+        <div class="stage-meta">
+          <span id="fileName">no image loaded</span>
+          <span><label style="cursor:pointer"><input type="checkbox" id="trimToggle" checked style="accent-color:var(--m)"> trim guide</label></span>
+        </div>
+        <div class="density" id="density">
+          <div class="meter" id="meter"><i></i></div>
+          <p id="densityText">Ink coverage is measured after you load an image.</p>
+        </div>
+        <input type="file" id="file" accept="image/*" style="width:100%" />
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow"><span>Queue</span><button class="small ghost" id="cancelAll">Clear CUPS queue</button></p>
+      <div id="jobs"><p class="empty-note">Nothing printed yet. Load artwork and start a run.</p></div>
+    </section>
+  </div>
+
+  <div>
+    <section>
+      <p class="eyebrow">Run</p>
+      <div class="group">
+        <div class="row">
+          <label for="name">Name</label>
+          <input type="text" id="name" value="Card" />
+        </div>
+        <div class="row">
+          <label for="copies">Copies</label>
+          <input type="number" id="copies" min="1" max="200" value="1" />
+        </div>
+        <div class="row">
+          <label for="delay">Gap (s)</label>
+          <input type="number" id="delay" min="0" max="120" step="0.5" value="3" />
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow"><span>Image</span><button class="small ghost" id="resetAdj">Reset</button></p>
+      <div class="group" id="adjustments"></div>
+    </section>
+
+    <section>
+      <p class="eyebrow"><span>Printer options</span><span id="optCount"></span></p>
+      <div class="group">
+        <details class="options" id="optDetails">
+          <summary>Driver settings from lpoptions</summary>
+          <input type="text" class="opt-search" id="optSearch" placeholder="filter…" />
+          <div class="opt-list" id="optList"></div>
+        </details>
+        <div class="cmd" id="cmd">lp -d … </div>
+      </div>
+      <button class="primary" id="print" disabled>Print</button>
+    </section>
+  </div>
+</main>
+
+<div class="toast hidden" id="toast"></div>
+
+<script>
+const ADJUSTMENTS = [
+  { key: "scale",      label: "Scale",      min: 90,  max: 110, step: 0.5, value: 100, unit: "%" },
+  { key: "h_offset",   label: "Offset X",   min: -60, max: 60,  step: 1,   value: 0,   unit: "px" },
+  { key: "v_offset",   label: "Offset Y",   min: -60, max: 60,  step: 1,   value: 0,   unit: "px" },
+  { key: "brightness", label: "Brightness", min: 60,  max: 160, step: 1,   value: 100, unit: "%" },
+  { key: "saturation", label: "Saturation", min: 0,   max: 180, step: 1,   value: 110, unit: "%" },
+  { key: "gamma",      label: "Gamma",      min: 0.4, max: 2.2, step: 0.05,value: 1,   unit: "" },
+  { key: "contrast",   label: "Contrast",   min: -4,  max: 4,   step: 1,   value: 0,   unit: "" },
+  { key: "sharpen",    label: "Sharpen",    min: 0,   max: 3,   step: 0.1, value: 1,   unit: "" },
+];
+
+const $ = (id) => document.getElementById(id);
+const state = { uploadId: null, options: [], chosen: {}, adj: {}, printer: "", busy: false };
+
+ADJUSTMENTS.forEach(a => state.adj[a.key] = a.value);
+
+// --- setup ------------------------------------------------------------------
+
+function buildAdjustments() {
+  $("adjustments").innerHTML = ADJUSTMENTS.map(a => `
+    <div class="row">
+      <label for="adj_${a.key}">${a.label}</label>
+      <input type="range" id="adj_${a.key}" min="${a.min}" max="${a.max}" step="${a.step}" value="${a.value}" />
+      <span class="value" id="val_${a.key}">${a.value}${a.unit}</span>
+    </div>`).join("");
+
+  ADJUSTMENTS.forEach(a => {
+    $(`adj_${a.key}`).addEventListener("input", (e) => {
+      const v = parseFloat(e.target.value);
+      state.adj[a.key] = v;
+      $(`val_${a.key}`).textContent = v + a.unit;
+      saveSettings();
+      schedulePreview();
+    });
+  });
+}
+
+async function loadPrinter() {
+  const info = await fetch("/api/printer").then(r => r.json());
+  state.printer = info.name;
+  state.options = info.options;
+  $("machine").textContent = info.name;
+  $("canvasNote").textContent = `CR80 · ${info.canvas.width}×${info.canvas.height} px`;
+  state.chosen = { ...info.defaults };
+  $("optCount").textContent = info.options.length ? `${info.options.length} available` : "driver not responding";
+  restoreSettings();
+  renderOptions();
+  renderCommand();
+}
+
+function renderOptions(filter = "") {
+  const needle = filter.trim().toLowerCase();
+  const rows = state.options
+    .filter(o => !needle || o.keyword.toLowerCase().includes(needle) || o.label.toLowerCase().includes(needle))
+    .map(o => {
+      const selected = state.chosen[o.keyword] ?? o.default;
+      const opts = o.choices.map(c => `<option value="${c}" ${c === selected ? "selected" : ""}>${c}</option>`).join("");
+      return `<div class="row">
+          <label for="opt_${o.keyword}" title="${o.keyword}">${o.keyword}</label>
+          <select id="opt_${o.keyword}" data-key="${o.keyword}">${opts}</select>
+        </div>`;
+    }).join("");
+  $("optList").innerHTML = rows || `<p class="empty-note">No options matched. If the list is empty entirely, check that lpoptions -p ${state.printer} -l returns choices.</p>`;
+  $("optList").querySelectorAll("select").forEach(sel => {
+    sel.addEventListener("change", (e) => {
+      state.chosen[e.target.dataset.key] = e.target.value;
+      saveSettings();
+      renderCommand();
+    });
+  });
+}
+
+function renderCommand() {
+  const parts = [`lp -d ${state.printer || "…"}`];
+  Object.entries(state.chosen).forEach(([k, v]) => parts.push(`-o <b>${k}</b>=${v}`));
+  parts.push("print.png");
+  $("cmd").innerHTML = parts.join(" \\<br>&nbsp;&nbsp;");
+}
+
+// --- upload and preview -----------------------------------------------------
+
+let previewTimer = null;
+function schedulePreview() {
+  if (!state.uploadId) return;
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(refreshPreview, 260);
+}
+
+async function refreshPreview() {
+  if (!state.uploadId) return;
+  try {
+    const res = await fetch("/api/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ upload_id: state.uploadId, adjustments: state.adj }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail?.message || "Preview failed.");
+    const data = await res.json();
+    $("preview").src = data.preview_url;
+    $("frame").classList.remove("empty");
+    showDensity(data.density);
+    $("print").disabled = false;
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function showDensity(d) {
+  const pct = d.mean === null ? 0 : Math.round(d.mean * 100);
+  $("meter").querySelector("i").style.width = pct + "%";
+  $("meter").classList.toggle("warn", d.level === "warn");
+  $("density").classList.toggle("warn", d.level === "warn");
+  $("densityText").textContent = d.message;
+}
+
+async function handleFile(file) {
+  if (!file) return;
+  const body = new FormData();
+  body.append("file", file);
+  $("fileName").textContent = "uploading…";
+  const res = await fetch("/api/upload", { method: "POST", body });
+  if (!res.ok) {
+    const err = await res.json();
+    $("fileName").textContent = "upload failed";
+    return toast(err.detail || "Upload failed.");
+  }
+  const data = await res.json();
+  state.uploadId = data.upload_id;
+  $("fileName").textContent = `${data.filename} · ${(data.bytes / 1024).toFixed(0)} KB`;
+  if ($("name").value === "Card") $("name").value = data.filename.replace(/\.[^.]+$/, "").slice(0, 40) || "Card";
+  refreshPreview();
+}
+
+// --- printing ---------------------------------------------------------------
+
+async function startPrint(acknowledge = false) {
+  if (!state.uploadId || state.busy) return;
+  state.busy = true;
+  $("print").disabled = true;
+  try {
+    const res = await fetch("/api/print", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        upload_id: state.uploadId,
+        copies: parseInt($("copies").value || "1", 10),
+        delay: parseFloat($("delay").value || "0"),
+        name: $("name").value,
+        options: state.chosen,
+        adjustments: state.adj,
+        acknowledge_density: acknowledge,
+      }),
+    });
+    const data = await res.json();
+    if (res.status === 409 && data.error === "density") {
+      if (confirm(data.density.message + "\n\nPrint anyway?")) return startPrint(true);
+      return;
+    }
+    if (!res.ok) throw new Error(data.detail?.message || "Could not start the run.");
+    toast(`Queued ${data.job.copies} card${data.job.copies > 1 ? "s" : ""}.`);
+    refreshJobs();
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    state.busy = false;
+    $("print").disabled = false;
+  }
+}
+
+const STATE_LABEL = {
+  queued: "waiting",
+  printing: "printing",
+  awaiting_confirmation: "check the output",
+  confirmed: "printed",
+  failed: "failed",
+  cancelled: "stopped",
+};
+
+async function refreshJobs() {
+  const { jobs } = await fetch("/api/jobs").then(r => r.json());
+  const running = jobs.some(j => j.state === "printing");
+  $("ribbon").classList.toggle("live", running);
+
+  if (!jobs.length) {
+    $("jobs").innerHTML = `<p class="empty-note">Nothing printed yet. Load artwork and start a run.</p>`;
+    return;
+  }
+
+  $("jobs").innerHTML = jobs.map(j => `
+    <div class="job ${j.state}">
+      <div class="job-head">
+        <span class="name">${escapeHtml(j.name)}</span>
+        <span class="job-state">${STATE_LABEL[j.state] || j.state}</span>
+        <span class="count">${j.printed}/${j.copies}</span>
+      </div>
+      ${j.state === "awaiting_confirmation" ? `
+        <p class="job-ask">CUPS says every card was sent, but the printer can stop mid-pass without reporting it. Did the cards come out?</p>
+        <div class="job-actions">
+          <button class="small" data-confirm="${j.id}" data-ok="1">All good</button>
+          <button class="small" data-confirm="${j.id}" data-ok="0">Something failed</button>
+        </div>` : ""}
+      ${j.state === "printing" || j.state === "queued" ? `
+        <div class="job-actions"><button class="small ghost" data-stop="${j.id}">Stop run</button></div>` : ""}
+    </div>`).join("");
+
+  $("jobs").querySelectorAll("[data-confirm]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      await fetch(`/api/jobs/${btn.dataset.confirm}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: btn.dataset.ok === "1" }),
+      });
+      refreshJobs();
+    });
+  });
+  $("jobs").querySelectorAll("[data-stop]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      await fetch(`/api/jobs/${btn.dataset.stop}/stop`, { method: "POST" });
+      refreshJobs();
+    });
+  });
+}
+
+async function refreshStatus() {
+  try {
+    const s = await fetch("/api/status").then(r => r.json());
+    $("dot").className = "dot " + s.state;
+    $("stateText").textContent = s.state;
+    if (s.reasons.length) $("stateText").title = s.reasons.join("\n");
+  } catch {
+    $("dot").className = "dot unknown";
+    $("stateText").textContent = "offline";
+  }
+}
+
+// --- settings persistence ---------------------------------------------------
+// The console usually runs on a tablet next to the printer. Calibration values
+// should survive a page reload without anyone re-dialling them.
+
+const STORE_KEY = "cardprint.settings.v1";
+
+function saveSettings() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      adj: state.adj,
+      chosen: state.chosen,
+      copies: $("copies").value,
+      delay: $("delay").value,
+    }));
+  } catch {}
+}
+
+function restoreSettings() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch { return; }
+  if (!saved) return;
+  Object.assign(state.adj, saved.adj || {});
+  ADJUSTMENTS.forEach(a => {
+    const input = $(`adj_${a.key}`);
+    if (!input) return;
+    input.value = state.adj[a.key];
+    $(`val_${a.key}`).textContent = state.adj[a.key] + a.unit;
+  });
+  Object.assign(state.chosen, saved.chosen || {});
+  if (saved.copies) $("copies").value = saved.copies;
+  if (saved.delay) $("delay").value = saved.delay;
+}
+
+// --- helpers ----------------------------------------------------------------
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+let toastTimer;
+function toast(message) {
+  $("toast").textContent = message;
+  $("toast").classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.add("hidden"), 6000);
+}
+
+// --- wiring -----------------------------------------------------------------
+
+buildAdjustments();
+loadPrinter();
+refreshStatus();
+refreshJobs();
+setInterval(refreshStatus, 5000);
+setInterval(refreshJobs, 2500);
+
+$("file").addEventListener("change", (e) => handleFile(e.target.files[0]));
+["copies", "delay"].forEach(id => $(id).addEventListener("change", saveSettings));
+$("print").addEventListener("click", () => startPrint(false));
+$("optSearch").addEventListener("input", (e) => renderOptions(e.target.value));
+$("trimToggle").addEventListener("change", (e) => $("frame").classList.toggle("no-trim", !e.target.checked));
+$("resetAdj").addEventListener("click", () => {
+  ADJUSTMENTS.forEach(a => {
+    state.adj[a.key] = a.value;
+    $(`adj_${a.key}`).value = a.value;
+    $(`val_${a.key}`).textContent = a.value + a.unit;
+  });
+  saveSettings();
+  schedulePreview();
+});
+$("cancelAll").addEventListener("click", async () => {
+  await fetch("/api/cancel-all", { method: "POST" });
+  toast("Cleared the CUPS queue.");
+  refreshJobs();
+});
+
+const frame = $("frame");
+["dragenter", "dragover"].forEach(evt => frame.addEventListener(evt, (e) => {
+  e.preventDefault();
+  frame.classList.add("dragging");
+}));
+["dragleave", "drop"].forEach(evt => frame.addEventListener(evt, (e) => {
+  e.preventDefault();
+  frame.classList.remove("dragging");
+}));
+frame.addEventListener("drop", (e) => handleFile(e.dataTransfer.files[0]));
+</script>
+</body>
+</html>
