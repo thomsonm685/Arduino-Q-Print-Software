@@ -7,12 +7,20 @@ from pathlib import Path
 # --- Printer -----------------------------------------------------------------
 PRINTER = os.environ.get("CARDPRINT_PRINTER", "Fargo-DTC-1250e")
 
-# Options always sent unless the UI overrides them. Matches the command that
-# printed successfully on the bench.
+# Options always sent unless the UI overrides them. This is the recommended
+# production command from the calibration spec, not the minimal bench command:
+# the three that printed successfully on the bench (PageSize/Resolution/Ribbon)
+# plus the single-sided, full-thickness, no-rotation, zero-lineup defaults.
 DEFAULT_PRINT_OPTIONS = {
     "PageSize": "CR80",
     "Resolution": "300dpi",
     "Ribbon": "YMCKO",
+    "CardThickness": "30",
+    "PrintBothSides": "False",
+    "RotateFront180": "False",
+    "RotateBack180": "False",
+    "ImageHOffset": "0",   # driver-level horizontal lineup, in printer units
+    "ImageVOffset": "0",   # driver-level vertical lineup, in printer units
 }
 
 # --- Image -------------------------------------------------------------------

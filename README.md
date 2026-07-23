@@ -41,7 +41,13 @@ sudo cupsenable Fargo-DTC-1250e && sudo cupsaccept Fargo-DTC-1250e
    canvas at 300 dpi.
 2. Adjust scale, X/Y offset, brightness, saturation, gamma, contrast and
    sharpen. The preview re-renders through ImageMagick, so what you see is the
-   actual file that will be sent.
+   actual file that will be sent. It is resampled with a Lanczos filter,
+   sharpened with an unsharp mask, and tagged 300 dpi so CUPS maps it 1:1 onto
+   the card.
+   - **Fit** picks how the art lands on the card: **Cover** fills the card and
+     crops the overflow (best for full-bleed photos), **Stretch** forces an
+     exact fill (use only when the source is already card-shaped), **Contain**
+     letterboxes.
 3. Driver options are read live from `lpoptions -p <printer> -l`, so the list
    matches whatever driver version is installed. The exact `lp` command is
    shown under the options panel before you commit.
@@ -104,5 +110,10 @@ ribbon, not the software.
 reboot after `usermod` is the reliable fix.
 
 **Art is clipped on the left and bottom** — known behaviour on full-bleed cards.
-Nudge Offset X positive and Offset Y negative, drop Scale to ~98%, and save the
-values you land on.
+Use the **Printer lineup** X/Y controls first: they drive the driver's
+`ImageHOffset` / `ImageVOffset`, which physically shift the print on the card
+and are the reliable way to line it up. The image-space Offset sliders only move
+art within the canvas and get partly rescaled by CUPS, so they are for
+composition, not lineup. Dial the lineup in against a test card — the values are
+in printer units and are not shown in the preview. Dropping Scale to ~98% also
+helps if the edge loss is symmetric.

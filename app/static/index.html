@@ -398,7 +398,29 @@
 
     <section>
       <p class="eyebrow"><span>Image</span><button class="small ghost" id="resetAdj">Reset</button></p>
-      <div class="group" id="adjustments"></div>
+      <div class="group">
+        <div class="row">
+          <label for="fit">Fit</label>
+          <select id="fit">
+            <option value="cover">Cover — fill card, crop overflow</option>
+            <option value="stretch">Stretch — fill exactly (may distort)</option>
+            <option value="contain">Contain — fit inside, letterbox</option>
+          </select>
+        </div>
+        <div id="adjustments"></div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow"><span>Printer lineup</span><span title="Driver ImageHOffset / ImageVOffset. Physically shifts the print on the card. Not shown in preview — dial in with a test card.">ⓘ</span></p>
+      <div class="group">
+        <div class="row">
+          <label for="lineupX">Lineup X</label>
+          <input type="number" id="lineupX" step="1" value="0" />
+          <label for="lineupY" style="flex:0 0 auto">Y</label>
+          <input type="number" id="lineupY" step="1" value="0" />
+        </div>
+      </div>
     </section>
 
     <section>
@@ -434,6 +456,10 @@ const $ = (id) => document.getElementById(id);
 const state = { uploadId: null, options: [], chosen: {}, adj: {}, printer: "", busy: false };
 
 ADJUSTMENTS.forEach(a => state.adj[a.key] = a.value);
+state.adj.fit = "cover";  // fill the card and crop, rather than distort or letterbox
+
+// Driver-level lineup lives in the options sent to lp, not in the image canvas.
+const LINEUP_KEYS = { lineupX: "ImageHOffset", lineupY: "ImageVOffset" };
 
 // --- setup ------------------------------------------------------------------
 
@@ -471,7 +497,9 @@ async function loadPrinter() {
 
 function renderOptions(filter = "") {
   const needle = filter.trim().toLowerCase();
+  const owned = new Set(Object.values(LINEUP_KEYS));  // driven by the lineup inputs
   const rows = state.options
+    .filter(o => !owned.has(o.keyword))
     .filter(o => !needle || o.keyword.toLowerCase().includes(needle) || o.label.toLowerCase().includes(needle))
     .map(o => {
       const selected = state.chosen[o.keyword] ?? o.default;
@@ -685,6 +713,10 @@ function restoreSettings() {
   Object.assign(state.chosen, saved.chosen || {});
   if (saved.copies) $("copies").value = saved.copies;
   if (saved.delay) $("delay").value = saved.delay;
+  if (state.adj.fit) $("fit").value = state.adj.fit;
+  Object.entries(LINEUP_KEYS).forEach(([id, key]) => {
+    if (state.chosen[key] !== undefined) $(id).value = state.chosen[key];
+  });
 }
 
 // --- helpers ----------------------------------------------------------------
@@ -711,6 +743,18 @@ setInterval(refreshStatus, 5000);
 setInterval(refreshJobs, 2500);
 
 $("file").addEventListener("change", (e) => handleFile(e.target.files[0]));
+$("fit").addEventListener("change", (e) => {
+  state.adj.fit = e.target.value;
+  saveSettings();
+  schedulePreview();
+});
+Object.entries(LINEUP_KEYS).forEach(([id, key]) => {
+  $(id).addEventListener("change", (e) => {
+    state.chosen[key] = String(parseInt(e.target.value || "0", 10) || 0);
+    saveSettings();
+    renderCommand();
+  });
+});
 ["copies", "delay"].forEach(id => $(id).addEventListener("change", saveSettings));
 $("print").addEventListener("click", () => startPrint(false));
 $("optSearch").addEventListener("input", (e) => renderOptions(e.target.value));

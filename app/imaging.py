@@ -45,7 +45,7 @@ class Adjustments:
             gamma=num("gamma", float, 1.0, 0.2, 3.0),
             contrast=num("contrast", int, 0, -4, 4),
             sharpen=num("sharpen", float, 1.0, 0.0, 5.0),
-            fit=str(data.get("fit", "stretch")) if data.get("fit") in ("stretch", "contain") else "stretch",
+            fit=str(data.get("fit")) if data.get("fit") in ("stretch", "contain", "cover") else "stretch",
             background=str(data.get("background", "white"))[:32] or "white",
         )
 
@@ -64,16 +64,22 @@ def build_argv(source: Path, target: Path, adj: Adjustments) -> list[str]:
     w, h = config.CANVAS_W, config.CANVAS_H
     scaled_w = round(w * adj.scale / 100)
     scaled_h = round(h * adj.scale / 100)
-    resize = f"{scaled_w}x{scaled_h}" + ("!" if adj.fit == "stretch" else "")
+    # stretch: force exact dims (distorts). cover: fill the box, overflow is
+    # clipped by the composite. contain: fit inside the box, letterboxed.
+    flag = {"stretch": "!", "cover": "^", "contain": ""}[adj.fit]
+    resize = f"{scaled_w}x{scaled_h}{flag}"
 
     argv = [
         *magick,
         "-size", f"{w}x{h}",
         f"xc:{adj.background}",
-        "(", str(source), "-resize", resize, ")",
+        # Lanczos is the sharpest general-purpose resampling filter; it matters
+        # most when downscaling a high-res badge to the 300 dpi card canvas.
+        "(", str(source), "-filter", "Lanczos", "-resize", resize, ")",
         "-gravity", "center",
         "-geometry", f"{adj.h_offset:+d}{adj.v_offset:+d}",
         "-composite",
+        "+repage",
     ]
 
     if adj.brightness != 100 or adj.saturation != 100:
@@ -83,9 +89,19 @@ def build_argv(source: Path, target: Path, adj: Adjustments) -> list[str]:
     for _ in range(abs(adj.contrast)):
         argv.append("+contrast" if adj.contrast < 0 else "-contrast")
     if adj.sharpen > 0:
-        argv += ["-sharpen", f"0x{adj.sharpen}"]
+        # Unsharp mask (edge-local contrast) reads sharper on dye-sub than a
+        # plain -sharpen convolution and avoids the bright halo on card text.
+        # Slider value drives sigma; amount and threshold are fixed for cards.
+        argv += ["-unsharp", f"0x{adj.sharpen}+0.8+0.008"]
 
-    argv += ["-alpha", "remove", "-alpha", "off", "-colorspace", "sRGB", str(target)]
+    # Tag the output as 300 dpi so the CUPS image filter maps pixels 1:1 onto
+    # the CR80 imageable area instead of inferring a scale from a bare raster.
+    argv += [
+        "-alpha", "remove", "-alpha", "off",
+        "-colorspace", "sRGB",
+        "-density", "300", "-units", "PixelsPerInch",
+        str(target),
+    ]
     return argv
 
 
