@@ -190,7 +190,8 @@ def print_test(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     target = folder / "print.png"
     result = imaging.render_calibration(target, config.CANVAS_W, config.CANVAS_H)
     if not result.ok:
-        raise HTTPException(500, {"message": "Could not render the test target.", "detail": result.as_dict()})
+        why = (result.stderr or result.stdout or "imagemagick failed").strip()[:300]
+        raise HTTPException(500, {"message": f"Could not render the test target: {why}", "detail": result.as_dict()})
 
     job = jobs.create(
         name="Calibration target",

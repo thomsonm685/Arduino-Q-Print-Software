@@ -115,19 +115,22 @@ def process(source: Path, target: Path, adj: Adjustments) -> Ran:
 # --- Calibration target ------------------------------------------------------
 
 
-def build_calibration_argv(target: Path, w: int, h: int, inset: int = 20) -> list[str]:
+def build_calibration_argv(target: Path, w: int, h: int, inset: int = 20, labels: bool = True) -> list[str]:
     """A single card for calibrating both print position and colour.
 
     Draws an edge frame + registration marks (line the print up on the card and
     measure edge clipping) and a strip of pure R/G/B/C/M/Y swatches (see how the
     printer maps colour). Rendered pixel-exact at the print canvas — no resize,
     sharpen or colour change — so what you measure is the printer, not us.
+
+    labels=False drops all text, for headless boards with no fonts installed
+    where drawing text would make ImageMagick fail.
     """
     magick = config.imagemagick_cmd()
     cx, cy = w // 2, h // 2
     L = 46  # registration mark arm length
 
-    d: list[str] = ["font-size 22", "text-align center"]
+    d: list[str] = ["font-size 22", "text-align center"] if labels else []
     # Outer frame at the very edge — if the printer clips, this is what vanishes.
     d += ["fill none stroke black stroke-width 4", f"rectangle 2,2 {w - 3},{h - 3}"]
     # Red inset frame at a known distance, so lost edge is measurable.
@@ -153,8 +156,9 @@ def build_calibration_argv(target: Path, w: int, h: int, inset: int = 20) -> lis
     for i, (hexcol, letter) in enumerate(swatches):
         x0 = margin + i * (sw + gap)
         d += [f"fill {hexcol} stroke none", f"rectangle {x0},{sy0} {x0 + sw},{sy0 + band_h}"]
-        label_col = "black" if letter in ("G", "C", "Y") else "white"
-        d += [f"fill {label_col} stroke none", f"text {x0 + sw // 2},{sy0 + band_h // 2 + 8} '{letter}'"]
+        if labels:
+            label_col = "black" if letter in ("G", "C", "Y") else "white"
+            d += [f"fill {label_col} stroke none", f"text {x0 + sw // 2},{sy0 + band_h // 2 + 8} '{letter}'"]
 
     # Greyscale ramp below the swatches, dark -> light.
     steps, ramp_y, ramp_h = 8, 364, 58
@@ -165,9 +169,10 @@ def build_calibration_argv(target: Path, w: int, h: int, inset: int = 20) -> lis
               f"rectangle {margin + i * rw},{ramp_y} {margin + (i + 1) * rw},{ramp_y + ramp_h}"]
 
     # Labels.
-    d += ["fill black stroke none font-size 26",
-          f"text {cx},{inset + 66} 'CALIBRATION  {w}x{h}px @ 300dpi'",
-          f"text {cx},{h - inset - 40} 'red frame = {inset}px inset  ({inset / 300 * 25.4:.1f}mm)'"]
+    if labels:
+        d += ["fill black stroke none font-size 26",
+              f"text {cx},{inset + 66} 'CALIBRATION  {w}x{h}px @ 300dpi'",
+              f"text {cx},{h - inset - 40} 'red frame = {inset}px inset  ({inset / 300 * 25.4:.1f}mm)'"]
 
     return [
         *magick, "-size", f"{w}x{h}", "xc:white",
@@ -178,7 +183,12 @@ def build_calibration_argv(target: Path, w: int, h: int, inset: int = 20) -> lis
 
 
 def render_calibration(target: Path, w: int, h: int) -> Ran:
-    return run(build_calibration_argv(target, w, h), timeout=120)
+    res = run(build_calibration_argv(target, w, h, labels=True), timeout=120)
+    if res.ok:
+        return res
+    # Text drawing fails on boards with no fonts installed. Retry without labels
+    # so the frame + swatches (the parts that actually matter) still render.
+    return run(build_calibration_argv(target, w, h, labels=False), timeout=120)
 
 
 def mean_luminance(path: Path) -> float | None:

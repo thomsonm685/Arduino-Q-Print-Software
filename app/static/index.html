@@ -780,7 +780,7 @@ $("printTest").addEventListener("click", async () => {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail?.message || "Could not print the target.");
+    if (!res.ok) throw new Error(data.detail?.message || data.detail || `Test print failed (HTTP ${res.status}).`);
     toast("Calibration target sent. Check the edges and the R/G/B/C/M/Y swatches.");
     refreshJobs();
   } catch (err) {
