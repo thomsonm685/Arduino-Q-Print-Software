@@ -50,7 +50,7 @@ sudo systemctl enable --now cardprint
 sleep 2
 sudo systemctl --no-pager --lines=5 status cardprint || true
 
-IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
 say "Done"
 echo "  Open http://${IP:-localhost}:8080"
 echo "  Logs:    journalctl -u cardprint -f"

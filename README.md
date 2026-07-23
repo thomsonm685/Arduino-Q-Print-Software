@@ -19,11 +19,22 @@ Assumes the Fargo CUPS driver and the printer queue are already set up.
 ```bash
 git clone <your-repo-url> card-printer
 cd card-printer
-chmod +x install.sh
+./doctor.sh          # read-only preflight: tools, CUPS, queue, group membership
+```
+
+**Quick start (foreground, for a first look):**
+
+```bash
+./run.sh             # builds the venv on first run, then serves. Ctrl-C to stop.
+```
+
+**Permanent install (systemd service, starts on boot):**
+
+```bash
 ./install.sh
 ```
 
-Then open `http://<uno-ip>:8080`.
+Either way, open `http://<uno-ip>:8080`.
 
 If the printer queue does not exist yet:
 

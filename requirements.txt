@@ -1,3 +1,6 @@
+# Plain uvicorn (not uvicorn[standard]): this app needs neither websockets nor
+# hot-reload, and avoiding uvloop/httptools/watchfiles removes the only deps
+# that could fail to find an aarch64 wheel on the UNO Q and try to compile.
 fastapi==0.115.6
-uvicorn[standard]==0.34.0
+uvicorn==0.34.0
 python-multipart==0.0.20
