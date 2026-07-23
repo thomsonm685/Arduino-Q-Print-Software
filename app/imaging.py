@@ -94,11 +94,14 @@ def build_argv(source: Path, target: Path, adj: Adjustments) -> list[str]:
         # Slider value drives sigma; amount and threshold are fixed for cards.
         argv += ["-unsharp", f"0x{adj.sharpen}+0.8+0.008"]
 
-    # Tag the output as 300 dpi so the CUPS image filter maps pixels 1:1 onto
-    # the CR80 imageable area instead of inferring a scale from a bare raster.
+    # Colour + output. -type TrueColor forces a full 24-bit RGB PNG so the file
+    # can never be palette-quantised (which would both shift colours and soften
+    # edges). sRGB is the working space the Fargo driver expects. The 300 dpi tag
+    # makes the CUPS image filter map pixels 1:1 onto the CR80 imageable area.
     argv += [
         "-alpha", "remove", "-alpha", "off",
         "-colorspace", "sRGB",
+        "-type", "TrueColor",
         "-density", "300", "-units", "PixelsPerInch",
         str(target),
     ]
