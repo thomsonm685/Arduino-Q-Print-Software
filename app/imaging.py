@@ -112,6 +112,75 @@ def process(source: Path, target: Path, adj: Adjustments) -> Ran:
     return run(build_argv(source, target, adj), timeout=180)
 
 
+# --- Calibration target ------------------------------------------------------
+
+
+def build_calibration_argv(target: Path, w: int, h: int, inset: int = 20) -> list[str]:
+    """A single card for calibrating both print position and colour.
+
+    Draws an edge frame + registration marks (line the print up on the card and
+    measure edge clipping) and a strip of pure R/G/B/C/M/Y swatches (see how the
+    printer maps colour). Rendered pixel-exact at the print canvas — no resize,
+    sharpen or colour change — so what you measure is the printer, not us.
+    """
+    magick = config.imagemagick_cmd()
+    cx, cy = w // 2, h // 2
+    L = 46  # registration mark arm length
+
+    d: list[str] = ["font-size 22", "text-align center"]
+    # Outer frame at the very edge — if the printer clips, this is what vanishes.
+    d += ["fill none stroke black stroke-width 4", f"rectangle 2,2 {w - 3},{h - 3}"]
+    # Red inset frame at a known distance, so lost edge is measurable.
+    d += ["stroke red stroke-width 2", f"rectangle {inset},{inset} {w - 1 - inset},{h - 1 - inset}"]
+    # Corner L registration marks, just inside the red frame.
+    for x, y, sx, sy in (
+        (inset, inset, 1, 1), (w - 1 - inset, inset, -1, 1),
+        (inset, h - 1 - inset, 1, -1), (w - 1 - inset, h - 1 - inset, -1, -1),
+    ):
+        d += ["stroke black stroke-width 3",
+              f"line {x},{y} {x + sx * L},{y}", f"line {x},{y} {x},{y + sy * L}"]
+    # Centre crosshair + circle.
+    d += ["stroke black stroke-width 2 fill none",
+          f"line {cx - 34},{cy} {cx + 34},{cy}", f"line {cx},{cy - 34} {cx},{cy + 34}",
+          f"circle {cx},{cy} {cx},{cy - 18}"]
+
+    # Colour swatch strip across the middle.
+    swatches = [("#FF0000", "R"), ("#00FF00", "G"), ("#0000FF", "B"),
+                ("#00FFFF", "C"), ("#FF00FF", "M"), ("#FFFF00", "Y")]
+    margin, gap, band_h = 70, 12, 138
+    sw = (w - 2 * margin - gap * (len(swatches) - 1)) // len(swatches)
+    sy0 = 116
+    for i, (hexcol, letter) in enumerate(swatches):
+        x0 = margin + i * (sw + gap)
+        d += [f"fill {hexcol} stroke none", f"rectangle {x0},{sy0} {x0 + sw},{sy0 + band_h}"]
+        label_col = "black" if letter in ("G", "C", "Y") else "white"
+        d += [f"fill {label_col} stroke none", f"text {x0 + sw // 2},{sy0 + band_h // 2 + 8} '{letter}'"]
+
+    # Greyscale ramp below the swatches, dark -> light.
+    steps, ramp_y, ramp_h = 8, 364, 58
+    rw = (w - 2 * margin) // steps
+    for i in range(steps):
+        v = round(255 * i / (steps - 1))
+        d += [f"fill rgb({v},{v},{v}) stroke none",
+              f"rectangle {margin + i * rw},{ramp_y} {margin + (i + 1) * rw},{ramp_y + ramp_h}"]
+
+    # Labels.
+    d += ["fill black stroke none font-size 26",
+          f"text {cx},{inset + 66} 'CALIBRATION  {w}x{h}px @ 300dpi'",
+          f"text {cx},{h - inset - 40} 'red frame = {inset}px inset  ({inset / 300 * 25.4:.1f}mm)'"]
+
+    return [
+        *magick, "-size", f"{w}x{h}", "xc:white",
+        "-fill", "black", "-draw", " ".join(d),
+        "-colorspace", "sRGB", "-type", "TrueColor",
+        "-density", "300", "-units", "PixelsPerInch", str(target),
+    ]
+
+
+def render_calibration(target: Path, w: int, h: int) -> Ran:
+    return run(build_calibration_argv(target, w, h), timeout=120)
+
+
 def mean_luminance(path: Path) -> float | None:
     """0.0 is solid black, 1.0 is solid white."""
     magick = config.imagemagick_cmd()

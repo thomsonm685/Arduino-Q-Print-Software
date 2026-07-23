@@ -434,6 +434,7 @@
         <div class="cmd" id="cmd">lp -d … </div>
       </div>
       <button class="primary" id="print" disabled>Print</button>
+      <button class="ghost small" id="printTest" style="width:100%;margin-top:8px">Print calibration target</button>
     </section>
   </div>
 </main>
@@ -764,6 +765,31 @@ Object.entries(LINEUP_KEYS).forEach(([id, key]) => {
 });
 ["copies", "delay"].forEach(id => $(id).addEventListener("change", saveSettings));
 $("print").addEventListener("click", () => startPrint(false));
+$("printTest").addEventListener("click", async () => {
+  if (state.busy) return;
+  state.busy = true;
+  $("printTest").disabled = true;
+  try {
+    const res = await fetch("/api/print-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        options: state.chosen,
+        copies: parseInt($("copies").value || "1", 10),
+        delay: parseFloat($("delay").value || "0"),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail?.message || "Could not print the target.");
+    toast("Calibration target sent. Check the edges and the R/G/B/C/M/Y swatches.");
+    refreshJobs();
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    state.busy = false;
+    $("printTest").disabled = false;
+  }
+});
 $("optSearch").addEventListener("input", (e) => renderOptions(e.target.value));
 $("trimToggle").addEventListener("change", (e) => $("frame").classList.toggle("no-trim", !e.target.checked));
 $("resetAdj").addEventListener("click", () => {

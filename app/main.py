@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -165,6 +165,44 @@ def start_print(payload: dict[str, Any]) -> dict[str, Any]:
         density=density,
     )
     return {"job": job.as_dict(), "command_preview": " ".join(printer.build_lp_argv(str(target), options, name))}
+
+
+@app.post("/api/print-test")
+def print_test(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """Render and print the calibration target with the current driver options.
+
+    Prints pixel-exact with no image processing, so the frame lands where the
+    driver puts it — reprint after nudging Lineup to dial in position, and read
+    the colour swatches to diagnose colour. Skips the density guard (the target
+    is intentionally colourful) but goes through the normal queue.
+    """
+    options = dict(config.DEFAULT_PRINT_OPTIONS)
+    for key, value in (payload.get("options") or {}).items():
+        if isinstance(key, str) and key.isidentifier() and value not in (None, ""):
+            options[key] = str(value)
+    try:
+        copies = max(1, min(int(payload.get("copies", 1) or 1), 50))
+        delay = max(0.0, min(float(payload.get("delay", 3) or 0), 120.0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "copies and delay must be numbers.")
+
+    folder = _upload_dir("caltarget-" + uuid.uuid4().hex[:8])
+    target = folder / "print.png"
+    result = imaging.render_calibration(target, config.CANVAS_W, config.CANVAS_H)
+    if not result.ok:
+        raise HTTPException(500, {"message": "Could not render the test target.", "detail": result.as_dict()})
+
+    job = jobs.create(
+        name="Calibration target",
+        copies=copies,
+        delay=delay,
+        options=options,
+        adjustments={},
+        source=target,
+        processed=target,
+        density={"level": "ok", "mean": None, "message": "Calibration target."},
+    )
+    return {"job": job.as_dict(), "command_preview": " ".join(printer.build_lp_argv(str(job.processed), options, "Calibration target"))}
 
 
 @app.get("/api/jobs")

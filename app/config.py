@@ -21,6 +21,10 @@ DEFAULT_PRINT_OPTIONS = {
     "RotateBack180": "False",
     "ImageHOffset": "0",   # driver-level horizontal lineup, in printer units
     "ImageVOffset": "0",   # driver-level vertical lineup, in printer units
+    # The driver defaults to RGBW (a 4-channel mode with an added white channel);
+    # feeding it standard 3-channel RGB there misaligns the channels and shifts
+    # hues (greens read blue). Plain RGB is the correct match for our output.
+    "ColorModel": "RGB",
 }
 
 # --- Image -------------------------------------------------------------------

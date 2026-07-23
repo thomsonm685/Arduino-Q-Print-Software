@@ -120,6 +120,18 @@ ribbon, not the software.
 **Permission denied on print** — the service user must be in the `lp` group. A
 reboot after `usermod` is the reliable fix.
 
+**Colours are wrong (e.g. greens print blue)** — check the driver's Color Mode.
+It ships as `RGBW`; feeding it standard RGB there misaligns the channels. The app
+sends `ColorModel=RGB` by default. Print the calibration target and read the
+R/G/B/C/M/Y swatches: if a colour is simply weak (often yellow), it's a dye-sub
+balance issue — adjust `DyeSubIntensity` or check the ribbon.
+
+**Calibration target** — the "Print calibration target" button prints a card with
+an edge frame, corner registration marks, colour swatches and a grey ramp, using
+your current driver options. Use it to line up the print (nudge **Lineup**,
+reprint, repeat until the frame is centred) and to diagnose colour. It is also
+saved at `docs/calibration_target.png`.
+
 **Art is clipped on the left and bottom** — known behaviour on full-bleed cards.
 Use the **Printer lineup** X/Y controls first: they drive the driver's
 `ImageHOffset` / `ImageVOffset`, which physically shift the print on the card
