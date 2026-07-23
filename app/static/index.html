@@ -587,27 +587,34 @@ async function startPrint(acknowledge = false) {
   state.busy = true;
   $("print").disabled = true;
   try {
-    const res = await fetch("/api/print", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        upload_id: state.uploadId,
-        copies: parseInt($("copies").value || "1", 10),
-        delay: parseFloat($("delay").value || "0"),
-        name: $("name").value,
-        options: state.chosen,
-        adjustments: state.adj,
-        acknowledge_density: acknowledge,
-      }),
-    });
-    const data = await res.json();
-    if (res.status === 409 && data.error === "density") {
-      if (confirm(data.density.message + "\n\nPrint anyway?")) return startPrint(true);
+    // The first submit may come back 409 if the art is too dark. If the operator
+    // confirms, we retry in the same call with acknowledge_density set — retrying
+    // by re-calling startPrint() would be blocked by the busy guard above.
+    while (true) {
+      const res = await fetch("/api/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          upload_id: state.uploadId,
+          copies: parseInt($("copies").value || "1", 10),
+          delay: parseFloat($("delay").value || "0"),
+          name: $("name").value,
+          options: state.chosen,
+          adjustments: state.adj,
+          acknowledge_density: acknowledge,
+        }),
+      });
+      const data = await res.json();
+      if (res.status === 409 && data.error === "density") {
+        if (!confirm(data.density.message + "\n\nPrint anyway?")) return;
+        acknowledge = true;
+        continue;  // resubmit, this time acknowledging the density warning
+      }
+      if (!res.ok) throw new Error(data.detail?.message || "Could not start the run.");
+      toast(`Queued ${data.job.copies} card${data.job.copies > 1 ? "s" : ""}.`);
+      refreshJobs();
       return;
     }
-    if (!res.ok) throw new Error(data.detail?.message || "Could not start the run.");
-    toast(`Queued ${data.job.copies} card${data.job.copies > 1 ? "s" : ""}.`);
-    refreshJobs();
   } catch (err) {
     toast(err.message);
   } finally {
