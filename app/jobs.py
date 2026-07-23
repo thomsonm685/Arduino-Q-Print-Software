@@ -79,6 +79,16 @@ def create(
         processed=str(processed),
         density=density,
     )
+    # Snapshot the processed image to a per-job file. The upload's print.png is
+    # rewritten by every preview, so without this a second preview mid-run would
+    # change the image an in-flight run is still sending to the printer.
+    snapshot = config.PRINTS_DIR / f"{job.id}.png"
+    try:
+        config.PRINTS_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(processed, snapshot)
+        job.processed = str(snapshot)
+    except OSError as exc:
+        job.note("snapshot_failed", repr(exc))
     with _lock:
         _jobs[job.id] = job
     job.note("queued", {"copies": copies, "options": options})
@@ -140,6 +150,7 @@ def _loop() -> None:
         job_id = _pending.get()
         job = get(job_id)
         if job is None or job.state == "cancelled":
+            _stop_requested.discard(job_id)
             continue
         try:
             _run_job(job)
@@ -217,6 +228,25 @@ def _cleanup_old() -> None:
         except ValueError:
             continue
         if finished < cutoff:
-            shutil.rmtree(config.JOBS_DIR / job.id, ignore_errors=True)
+            # Drop this job's image snapshot, then forget the job.
+            try:
+                Path(job.processed).unlink()
+            except OSError:
+                pass
             with _lock:
                 _jobs.pop(job.id, None)
+
+    # Sweep upload folders (source + preview render) that have aged out. Their
+    # mtime bumps on every preview, so an actively edited upload is never swept.
+    try:
+        for folder in config.UPLOADS_DIR.iterdir():
+            if not folder.is_dir():
+                continue
+            try:
+                mtime = datetime.fromtimestamp(folder.stat().st_mtime, timezone.utc)
+            except OSError:
+                continue
+            if mtime < cutoff:
+                shutil.rmtree(folder, ignore_errors=True)
+    except OSError:
+        pass

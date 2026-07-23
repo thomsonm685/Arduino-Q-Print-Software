@@ -53,7 +53,7 @@ def cancel_all() -> dict[str, Any]:
 
 
 def _upload_dir(upload_id: str) -> Path:
-    path = config.JOBS_DIR / upload_id
+    path = config.UPLOADS_DIR / upload_id
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -81,7 +81,7 @@ async def upload(file: UploadFile = File(...)) -> dict[str, Any]:
 
 
 def _resolve_source(upload_id: str) -> Path:
-    folder = config.JOBS_DIR / upload_id
+    folder = config.UPLOADS_DIR / upload_id
     for candidate in sorted(folder.glob("source.*")):
         return candidate
     raise HTTPException(404, "That image is no longer on disk. Upload it again.")
@@ -110,7 +110,7 @@ def preview(payload: dict[str, Any]) -> dict[str, Any]:
 
 @app.get("/api/file/{upload_id}/{which}")
 def serve_file(upload_id: str, which: str) -> FileResponse:
-    folder = config.JOBS_DIR / upload_id
+    folder = config.UPLOADS_DIR / upload_id
     if not folder.is_dir():
         raise HTTPException(404, "Not found.")
     if which == "print":
@@ -130,8 +130,14 @@ def serve_file(upload_id: str, which: str) -> FileResponse:
 @app.post("/api/print")
 def start_print(payload: dict[str, Any]) -> dict[str, Any]:
     upload_id = str(payload.get("upload_id", ""))
-    copies = max(1, min(int(payload.get("copies", 1) or 1), 200))
-    delay = max(0.0, min(float(payload.get("delay", 3) or 0), 120.0))
+    try:
+        copies = max(1, min(int(payload.get("copies", 1) or 1), 200))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "copies must be a whole number.")
+    try:
+        delay = max(0.0, min(float(payload.get("delay", 3) or 0), 120.0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "delay must be a number of seconds.")
     name = (str(payload.get("name") or "Card")).strip()[:60] or "Card"
 
     options = dict(config.DEFAULT_PRINT_OPTIONS)

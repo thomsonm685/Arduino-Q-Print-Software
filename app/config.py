@@ -34,7 +34,11 @@ DENSITY_WARN_THRESHOLD = float(os.environ.get("CARDPRINT_DENSITY_WARN", 0.32))
 
 # --- Storage -----------------------------------------------------------------
 DATA_DIR = Path(os.environ.get("CARDPRINT_DATA", Path.home() / ".local/share/cardprint"))
-JOBS_DIR = DATA_DIR / "jobs"
+# Uploads and their live preview render live here, keyed by upload id.
+UPLOADS_DIR = DATA_DIR / "uploads"
+# Each job snapshots its processed image here, keyed by job id, so a later
+# preview of the same upload can't mutate an in-flight run's image.
+PRINTS_DIR = DATA_DIR / "prints"
 PRESETS_FILE = DATA_DIR / "presets.json"
 HISTORY_FILE = DATA_DIR / "history.jsonl"
 
@@ -60,4 +64,5 @@ def imagemagick_cmd() -> list[str]:
 
 
 def ensure_dirs() -> None:
-    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    PRINTS_DIR.mkdir(parents=True, exist_ok=True)
