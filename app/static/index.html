@@ -424,6 +424,17 @@
     </section>
 
     <section>
+      <p class="eyebrow"><span>Dye intensity</span><span title="Driver DyeSubIntensity (YMC). Higher = richer, denser colour; lower = lighter. Physical — not shown in preview. Very high can stall the printer on dark art.">ⓘ</span></p>
+      <div class="group">
+        <div class="row">
+          <label for="dye">Intensity</label>
+          <input type="range" id="dye" min="-50" max="50" step="1" value="0" />
+          <span class="value" id="dyeVal">0</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
       <p class="eyebrow"><span>Printer options</span><span id="optCount"></span></p>
       <div class="group">
         <details class="options" id="optDetails">
@@ -466,6 +477,8 @@ state.adj.fit = "cover";  // fill the card and crop, rather than distort or lett
 
 // Driver-level lineup lives in the options sent to lp, not in the image canvas.
 const LINEUP_KEYS = { lineupX: "ImageHOffset", lineupY: "ImageVOffset" };
+// Driver keys with dedicated controls, kept out of the generic options list.
+const DEDICATED_KEYS = ["ImageHOffset", "ImageVOffset", "DyeSubIntensity"];
 
 // --- setup ------------------------------------------------------------------
 
@@ -503,7 +516,7 @@ async function loadPrinter() {
 
 function renderOptions(filter = "") {
   const needle = filter.trim().toLowerCase();
-  const owned = new Set(Object.values(LINEUP_KEYS));  // driven by the lineup inputs
+  const owned = new Set(DEDICATED_KEYS);  // driven by dedicated controls
   const rows = state.options
     .filter(o => !owned.has(o.keyword))
     .filter(o => !needle || o.keyword.toLowerCase().includes(needle) || o.label.toLowerCase().includes(needle))
@@ -738,6 +751,10 @@ function restoreSettings() {
   Object.entries(LINEUP_KEYS).forEach(([id, key]) => {
     if (state.chosen[key] !== undefined) $(id).value = state.chosen[key];
   });
+  if (state.chosen.DyeSubIntensity !== undefined) {
+    $("dye").value = state.chosen.DyeSubIntensity;
+    $("dyeVal").textContent = state.chosen.DyeSubIntensity;
+  }
 }
 
 // --- helpers ----------------------------------------------------------------
@@ -775,6 +792,13 @@ Object.entries(LINEUP_KEYS).forEach(([id, key]) => {
     saveSettings();
     renderCommand();
   });
+});
+$("dye").addEventListener("input", (e) => {
+  const v = parseInt(e.target.value || "0", 10) || 0;
+  state.chosen.DyeSubIntensity = String(v);
+  $("dyeVal").textContent = v;
+  saveSettings();
+  renderCommand();
 });
 ["copies", "delay"].forEach(id => $(id).addEventListener("change", saveSettings));
 $("print").addEventListener("click", () => startPrint(false));
