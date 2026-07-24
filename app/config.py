@@ -25,6 +25,10 @@ DEFAULT_PRINT_OPTIONS = {
     # feeding it standard 3-channel RGB there misaligns the channels and shifts
     # hues (greens read blue). Plain RGB is the correct match for our output.
     "ColorModel": "RGB",
+    # ColorMatching None does a crude linear RGB->dye conversion that maps nuanced
+    # greens toward blue. ICC2 applies a real colour profile and prints true green;
+    # confirmed on the bench to beat both None and ICC1.
+    "ColorMatching": "ICC2",
 }
 
 # --- Image -------------------------------------------------------------------

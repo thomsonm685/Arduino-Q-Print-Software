@@ -120,11 +120,13 @@ ribbon, not the software.
 **Permission denied on print** — the service user must be in the `lp` group. A
 reboot after `usermod` is the reliable fix.
 
-**Colours are wrong (e.g. greens print blue)** — check the driver's Color Mode.
-It ships as `RGBW`; feeding it standard RGB there misaligns the channels. The app
-sends `ColorModel=RGB` by default. Print the calibration target and read the
-R/G/B/C/M/Y swatches: if a colour is simply weak (often yellow), it's a dye-sub
-balance issue — adjust `DyeSubIntensity` or check the ribbon.
+**Colours are wrong (e.g. greens print blue)** — two driver settings matter, and
+the app sets both by default: `ColorModel=RGB` (the driver ships as `RGBW`, which
+misaligns 3-channel RGB input) and `ColorMatching=ICC2` (the default `None` maps
+nuanced greens toward blue; ICC2 applies a real colour profile). If a colour is
+still simply weak (often yellow), that's a dye-sub balance issue — raise
+`DyeSubIntensity` or check the ribbon. The Test 1 / Test 2 buttons print the
+uploaded image with `ColorMatching=ICC1` / `ICC2` for comparison.
 
 **Calibration target** — the "Print calibration target" button prints a card with
 an edge frame, corner registration marks, colour swatches and a grey ramp, using
