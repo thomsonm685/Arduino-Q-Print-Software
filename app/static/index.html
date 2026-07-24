@@ -511,6 +511,12 @@ async function loadPrinter() {
   state.chosen = { ...info.defaults };
   $("optCount").textContent = info.options.length ? `${info.options.length} available` : "driver not responding";
   restoreSettings();
+  // Colour-critical driver options always come from the server's tested defaults,
+  // never a stale saved value — otherwise old localStorage shadows them and the
+  // default Print stops matching what the Test buttons do.
+  ["ColorModel", "ColorMatching"].forEach(k => {
+    if (info.defaults[k] !== undefined) state.chosen[k] = info.defaults[k];
+  });
   renderOptions();
   renderCommand();
 }
