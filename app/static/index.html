@@ -424,13 +424,14 @@
     </section>
 
     <section>
-      <p class="eyebrow"><span>Dye intensity</span><span title="Driver DyeSubIntensity (YMC). Higher = richer, denser colour; lower = lighter. Physical — not shown in preview. Very high can stall the printer on dark art.">ⓘ</span></p>
+      <p class="eyebrow"><span>Dye intensity</span><span title="Driver DyeSubIntensity (YMC). Higher = richer, denser colour; lower = lighter. Physical — not shown in preview.">ⓘ</span></p>
       <div class="group">
         <div class="row">
           <label for="dye">Intensity</label>
-          <input type="range" id="dye" min="-50" max="50" step="1" value="0" />
+          <input type="range" id="dye" min="-50" max="15" step="1" value="0" />
           <span class="value" id="dyeVal">0</span>
         </div>
+        <p id="dyeNote" style="font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.5">Richer colour, but adds heat. Raise +5 at a time — too high fuses the ribbon to the card and jams the machine.</p>
       </div>
     </section>
 
@@ -752,8 +753,14 @@ function restoreSettings() {
     if (state.chosen[key] !== undefined) $(id).value = state.chosen[key];
   });
   if (state.chosen.DyeSubIntensity !== undefined) {
-    $("dye").value = state.chosen.DyeSubIntensity;
-    $("dyeVal").textContent = state.chosen.DyeSubIntensity;
+    // Clamp any previously-saved value to the slider's safe range (an earlier
+    // build allowed up to +50; a high saved value must not silently persist).
+    let dv = Math.max(-50, Math.min(15, parseInt(state.chosen.DyeSubIntensity, 10) || 0));
+    state.chosen.DyeSubIntensity = String(dv);
+    $("dye").value = dv;
+    $("dyeVal").textContent = dv;
+    $("dyeVal").style.color = dv > 8 ? "var(--warn)" : "";
+    $("dyeNote").style.color = dv > 8 ? "var(--warn)" : "var(--muted)";
   }
 }
 
@@ -797,6 +804,8 @@ $("dye").addEventListener("input", (e) => {
   const v = parseInt(e.target.value || "0", 10) || 0;
   state.chosen.DyeSubIntensity = String(v);
   $("dyeVal").textContent = v;
+  $("dyeVal").style.color = v > 8 ? "var(--warn)" : "";
+  $("dyeNote").style.color = v > 8 ? "var(--warn)" : "var(--muted)";
   saveSettings();
   renderCommand();
 });
