@@ -435,6 +435,11 @@
       </div>
       <button class="primary" id="print" disabled>Print</button>
       <button class="ghost small" id="printTest" style="width:100%;margin-top:8px">Print calibration target</button>
+      <p class="eyebrow" style="margin:14px 0 8px">Colour matching test · uploaded image</p>
+      <div style="display:flex;gap:8px">
+        <button class="ghost small" id="test1" style="flex:1" disabled>Test 1 · ICC1</button>
+        <button class="ghost small" id="test2" style="flex:1" disabled>Test 2 · ICC2</button>
+      </div>
     </section>
   </div>
 </main>
@@ -550,6 +555,8 @@ async function refreshPreview() {
     $("frame").classList.remove("empty");
     showDensity(data.density);
     $("print").disabled = false;
+    $("test1").disabled = false;
+    $("test2").disabled = false;
   } catch (err) {
     toast(err.message);
   }
@@ -583,10 +590,14 @@ async function handleFile(file) {
 
 // --- printing ---------------------------------------------------------------
 
-async function startPrint(acknowledge = false) {
+// overrides merges extra -o options for this print only (used by the ICC test
+// buttons); nameSuffix tags the job so the queue shows which test it was.
+async function startPrint(acknowledge = false, overrides = null, nameSuffix = "") {
   if (!state.uploadId || state.busy) return;
   state.busy = true;
   $("print").disabled = true;
+  const options = overrides ? { ...state.chosen, ...overrides } : state.chosen;
+  const name = nameSuffix ? `${$("name").value} ${nameSuffix}`.slice(0, 60) : $("name").value;
   try {
     // The first submit may come back 409 if the art is too dark. If the operator
     // confirms, we retry in the same call with acknowledge_density set — retrying
@@ -599,8 +610,8 @@ async function startPrint(acknowledge = false) {
           upload_id: state.uploadId,
           copies: parseInt($("copies").value || "1", 10),
           delay: parseFloat($("delay").value || "0"),
-          name: $("name").value,
-          options: state.chosen,
+          name: name,
+          options: options,
           adjustments: state.adj,
           acknowledge_density: acknowledge,
         }),
@@ -612,7 +623,9 @@ async function startPrint(acknowledge = false) {
         continue;  // resubmit, this time acknowledging the density warning
       }
       if (!res.ok) throw new Error(data.detail?.message || "Could not start the run.");
-      toast(`Queued ${data.job.copies} card${data.job.copies > 1 ? "s" : ""}.`);
+      toast(nameSuffix
+        ? `Sent ${nameSuffix}. Compare the printed card.`
+        : `Queued ${data.job.copies} card${data.job.copies > 1 ? "s" : ""}.`);
       refreshJobs();
       return;
     }
@@ -765,6 +778,8 @@ Object.entries(LINEUP_KEYS).forEach(([id, key]) => {
 });
 ["copies", "delay"].forEach(id => $(id).addEventListener("change", saveSettings));
 $("print").addEventListener("click", () => startPrint(false));
+$("test1").addEventListener("click", () => startPrint(false, { ColorMatching: "ICC1" }, "ICC1"));
+$("test2").addEventListener("click", () => startPrint(false, { ColorMatching: "ICC2" }, "ICC2"));
 $("printTest").addEventListener("click", async () => {
   if (state.busy) return;
   state.busy = true;
