@@ -12,6 +12,22 @@ lp -d Fargo-DTC-1250e -o PageSize=CR80 -o Resolution=300dpi -o Ribbon=YMCKO card
 
 Every ImageMagick and `lp` invocation is logged verbatim on the job record.
 
+See [`RESEARCH.md`](RESEARCH.md) for the full DTC1250e print-tuning reference
+(dye-sub physics, every driver option, heat/bleed/fade/jam diagnosis, edge-to-edge,
+and the button self-test).
+
+## Sharp black text & barcodes (optional)
+
+Because the app sends a flattened image, black text is just dark pixels — it does
+**not** auto-route to the sharp resin (K) panel. If you print barcodes or crisp black
+text and want them sharper, set these in the **Printer options** panel (they trade off
+against smooth photo shadows, so they aren't defaults):
+
+- `KPanelApplyFront` = `Fullcard` — route black pixels to the resin panel
+- `YMCunderKFront` = `False` — sharpest resin edges (already the default)
+- `ResinDither` = `graphics` — crisp text/barcodes (already the default)
+- `ResinHeatFront` — raise a few points if resin black prints faint
+
 ## Install
 
 Assumes the Fargo CUPS driver and the printer queue are already set up.

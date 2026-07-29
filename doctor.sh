@@ -34,6 +34,23 @@ else
   bad "queue '$PRINTER' not registered — add it with lpadmin (see README)"
 fi
 
+echo "Fargo CUPS filter (arch must match host — the classic 'filter failed' on ARM)"
+FILT=$(ls /usr/libexec/cups/filter/rastertofargo-* 2>/dev/null | head -1)
+if [[ -n "$FILT" ]]; then
+  [[ -x "$FILT" ]] && ok "present: $(basename "$FILT")" || bad "not executable: $FILT — sudo chmod 755 it"
+  AINFO=$(file -b "$FILT" 2>/dev/null)
+  note "$AINFO"
+  HA=$(uname -m)
+  case "$HA" in
+    aarch64|arm64) echo "$AINFO" | grep -qiE 'aarch64|arm64|ARM aarch64' && ok "matches host ($HA)" || bad "filter is NOT ARM64 — jobs will 'filter failed'; get the ARM driver build" ;;
+    armv7l|armhf)  echo "$AINFO" | grep -qiE 'ARM,|armhf|EABI' && ok "matches host ($HA)" || bad "filter arch may not match host $HA" ;;
+    x86_64)        echo "$AINFO" | grep -qiE 'x86-64|x86_64|amd64' && ok "matches host ($HA)" || bad "filter arch may not match host $HA" ;;
+    *)             note "host $HA — verify the filter arch above matches by eye" ;;
+  esac
+else
+  note "rastertofargo filter not found in /usr/libexec/cups/filter — driver may live elsewhere, or isn't installed"
+fi
+
 echo "Group membership (needed to submit jobs)"
 if id -nG "$USER" | grep -qw lp; then ok "$USER is in group 'lp'"; else bad "$USER not in 'lp' — sudo usermod -aG lp $USER, then reboot"; fi
 

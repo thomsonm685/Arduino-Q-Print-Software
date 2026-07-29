@@ -412,14 +412,15 @@
     </section>
 
     <section>
-      <p class="eyebrow"><span>Printer lineup</span><span title="Driver ImageHOffset / ImageVOffset. Physically shifts the print on the card. Not shown in preview — dial in with a test card.">ⓘ</span></p>
+      <p class="eyebrow"><span>Printer lineup</span><span title="Driver ImageHOffset / ImageVOffset (range ±100). Physically shifts the print on the card. Not shown in preview — dial in with a test card.">ⓘ</span></p>
       <div class="group">
         <div class="row">
           <label for="lineupX">Lineup X</label>
-          <input type="number" id="lineupX" step="1" value="0" />
+          <input type="number" id="lineupX" min="-100" max="100" step="1" value="0" />
           <label for="lineupY" style="flex:0 0 auto">Y</label>
-          <input type="number" id="lineupY" step="1" value="0" />
+          <input type="number" id="lineupY" min="-100" max="100" step="1" value="0" />
         </div>
+        <p style="font-size:12px;color:var(--warn);margin:8px 0 0;line-height:1.5">HID warns that a large <b>X</b> (horizontal) offset can break the ribbon — nudge it a few units at a time. Y is safe.</p>
       </div>
     </section>
 
@@ -428,10 +429,10 @@
       <div class="group">
         <div class="row">
           <label for="dye">Intensity</label>
-          <input type="range" id="dye" min="-50" max="15" step="1" value="0" />
+          <input type="range" id="dye" min="-50" max="10" step="1" value="0" />
           <span class="value" id="dyeVal">0</span>
         </div>
-        <p id="dyeNote" style="font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.5">Richer colour, but adds heat. Raise +5 at a time — too high fuses the ribbon to the card and jams the machine.</p>
+        <p id="dyeNote" style="font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.5">Richer colour, but adds heat. Most cards are happy at 0–10; raise +5 at a time. Too high fuses the ribbon to the card and jams the machine.</p>
       </div>
     </section>
 
@@ -759,9 +760,9 @@ function restoreSettings() {
     if (state.chosen[key] !== undefined) $(id).value = state.chosen[key];
   });
   if (state.chosen.DyeSubIntensity !== undefined) {
-    // Clamp any previously-saved value to the slider's safe range (an earlier
-    // build allowed up to +50; a high saved value must not silently persist).
-    let dv = Math.max(-50, Math.min(15, parseInt(state.chosen.DyeSubIntensity, 10) || 0));
+    // Clamp any previously-saved value to the slider's safe range (earlier builds
+    // allowed +50 then +15; a high saved value must not silently persist).
+    let dv = Math.max(-50, Math.min(10, parseInt(state.chosen.DyeSubIntensity, 10) || 0));
     state.chosen.DyeSubIntensity = String(dv);
     $("dye").value = dv;
     $("dyeVal").textContent = dv;
@@ -801,7 +802,9 @@ $("fit").addEventListener("change", (e) => {
 });
 Object.entries(LINEUP_KEYS).forEach(([id, key]) => {
   $(id).addEventListener("change", (e) => {
-    state.chosen[key] = String(parseInt(e.target.value || "0", 10) || 0);
+    const v = Math.max(-100, Math.min(100, parseInt(e.target.value || "0", 10) || 0));  // driver range
+    e.target.value = v;
+    state.chosen[key] = String(v);
     saveSettings();
     renderCommand();
   });

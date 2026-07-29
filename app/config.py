@@ -21,9 +21,10 @@ DEFAULT_PRINT_OPTIONS = {
     "RotateBack180": "False",
     "ImageHOffset": "0",   # driver-level horizontal lineup, in printer units
     "ImageVOffset": "0",   # driver-level vertical lineup, in printer units
-    # The driver defaults to RGBW (a 4-channel mode with an added white channel);
-    # feeding it standard 3-channel RGB there misaligns the channels and shifts
-    # hues (greens read blue). Plain RGB is the correct match for our output.
+    # The driver defaults to RGBW: a 4-channel mode (HID's documented driver calls
+    # the equivalent "RGBK" — the 4th channel is routed to the black/resin panel,
+    # not white). Feeding it our standard 3-channel RGB misaligns the channels and
+    # shifts hues (greens read blue). Plain RGB is the correct match. See RESEARCH.md.
     "ColorModel": "RGB",
     # ColorMatching None does a crude linear RGB->dye conversion that maps nuanced
     # greens toward blue. ICC2 applies a real colour profile and prints true green;
