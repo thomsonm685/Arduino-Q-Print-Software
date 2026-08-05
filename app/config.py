@@ -46,6 +46,15 @@ DEFAULT_PRINT_OPTIONS = {
 CANVAS_W = int(os.environ.get("CARDPRINT_CANVAS_W", 1008))
 CANVAS_H = int(os.environ.get("CARDPRINT_CANVAS_H", 633))
 
+# Overscan: scale printed art this % past the card edge (the overflow is clipped
+# by the canvas) so a full-bleed design leaves no white sliver at the trim. This
+# does NOT print beyond the physical card — the driver has no over-the-edge mode
+# and CUPS tiles anything larger than one page onto extra cards — it just
+# guarantees ink is laid across the whole imageable area. ~2% ≈ 0.85 mm of bleed
+# per edge. Only applied to fill fits (cover/stretch), never letterbox (contain).
+# A one-sided white edge that survives this is mechanical: nudge Lineup instead.
+BLEED_PERCENT = float(os.environ.get("CARDPRINT_BLEED_PERCENT", 2))
+
 # Mean luminance below this triggers the too-dark warning. The DTC1250e stalls
 # on high-coverage art without reporting anything back to CUPS.
 DENSITY_WARN_THRESHOLD = float(os.environ.get("CARDPRINT_DENSITY_WARN", 0.32))

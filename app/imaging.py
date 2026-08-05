@@ -62,8 +62,12 @@ def build_argv(source: Path, target: Path, adj: Adjustments) -> list[str]:
     """
     magick = config.imagemagick_cmd()
     w, h = config.CANVAS_W, config.CANVAS_H
-    scaled_w = round(w * adj.scale / 100)
-    scaled_h = round(h * adj.scale / 100)
+    # Overscan the art a few % past the card edge (clipped by the canvas) so a
+    # full-bleed design leaves no white gap at the trim. Skipped for letterbox
+    # (contain), where the white border is the whole point.
+    bleed = 1.0 + config.BLEED_PERCENT / 100.0 if adj.fit != "contain" and config.BLEED_PERCENT > 0 else 1.0
+    scaled_w = round(w * adj.scale / 100 * bleed)
+    scaled_h = round(h * adj.scale / 100 * bleed)
     # stretch: force exact dims (distorts). cover: fill the box, overflow is
     # clipped by the composite. contain: fit inside the box, letterboxed.
     flag = {"stretch": "!", "cover": "^", "contain": ""}[adj.fit]
@@ -129,10 +133,17 @@ def build_calibration_argv(target: Path, w: int, h: int, inset: int = 20, labels
     magick = config.imagemagick_cmd()
     cx, cy = w // 2, h // 2
     L = 46  # registration mark arm length
+    edge = 12  # full-bleed colour band width, ~1mm at 300dpi
 
     d: list[str] = ["font-size 22", "text-align center"] if labels else []
-    # Outer frame at the very edge — if the printer clips, this is what vanishes.
-    d += ["fill none stroke black stroke-width 4", f"rectangle 2,2 {w - 3},{h - 3}"]
+    # Full-bleed colour band painted right to pixel 0. On the printed card,
+    # wherever you still see white *outside* this blue band the printer isn't
+    # reaching that edge — nudge Lineup toward the white side. This is the true
+    # edge-to-edge coverage test; ink fills 0..edge, the interior is white.
+    d += ["fill #1560BD stroke none", f"rectangle 0,0 {w - 1},{h - 1}",
+          "fill white stroke none", f"rectangle {edge},{edge} {w - 1 - edge},{h - 1 - edge}"]
+    # Black frame just inside the bleed band — the "safe area" edge.
+    d += ["fill none stroke black stroke-width 3", f"rectangle {edge},{edge} {w - 1 - edge},{h - 1 - edge}"]
     # Red inset frame at a known distance, so lost edge is measurable.
     d += ["stroke red stroke-width 2", f"rectangle {inset},{inset} {w - 1 - inset},{h - 1 - inset}"]
     # Corner L registration marks, just inside the red frame.
@@ -172,7 +183,7 @@ def build_calibration_argv(target: Path, w: int, h: int, inset: int = 20, labels
     if labels:
         d += ["fill black stroke none font-size 26",
               f"text {cx},{inset + 66} 'CALIBRATION  {w}x{h}px @ 300dpi'",
-              f"text {cx},{h - inset - 40} 'red frame = {inset}px inset  ({inset / 300 * 25.4:.1f}mm)'"]
+              f"text {cx},{h - inset - 40} 'blue band = bleed to edge  ·  red = {inset}px inset ({inset / 300 * 25.4:.1f}mm)'"]
 
     return [
         *magick, "-size", f"{w}x{h}", "xc:white",
