@@ -33,9 +33,18 @@ DEFAULT_PRINT_OPTIONS = {
 }
 
 # --- Image -------------------------------------------------------------------
-# Calibrated print canvas, in pixels, at 300 dpi on a CR80 card.
-CANVAS_W = int(os.environ.get("CARDPRINT_CANVAS_W", 1110))
-CANVAS_H = int(os.environ.get("CARDPRINT_CANVAS_H", 638))
+# Print canvas in pixels at 300 dpi. These MUST match the aspect ratio of the
+# driver's CR80 page or CUPS silently shrinks the whole page to fit and centres
+# it, leaving a white border (the classic "won't print edge to edge"). The PPD
+# declares:  PaperDimension CR80 "152 242"  and  ImageableArea CR80 "0 0 152 242"
+# — points (1/72"), and imageable == paper, so the driver reserves NO margin.
+#   242 pt / 72 * 300 dpi = 1008 px      152 pt / 72 * 300 dpi = 633 px
+# At exactly this size CUPS maps the image 1:1 onto the card's full imageable
+# area and the art reaches all four edges. Landscape here (W > H); the driver
+# rotates to its portrait page. Do not oversize "for bleed" — a bigger canvas
+# just makes CUPS scale everything back down and reintroduces the border.
+CANVAS_W = int(os.environ.get("CARDPRINT_CANVAS_W", 1008))
+CANVAS_H = int(os.environ.get("CARDPRINT_CANVAS_H", 633))
 
 # Mean luminance below this triggers the too-dark warning. The DTC1250e stalls
 # on high-coverage art without reporting anything back to CUPS.

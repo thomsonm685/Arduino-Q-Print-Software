@@ -64,8 +64,9 @@ sudo cupsenable Fargo-DTC-1250e && sudo cupsaccept Fargo-DTC-1250e
 
 ## How a run works
 
-1. Drop an image on the card preview. It is composited onto a 1110 × 638
-   canvas at 300 dpi.
+1. Drop an image on the card preview. It is composited onto a 1008 × 633
+   canvas at 300 dpi — the CR80's exact imageable size, so CUPS maps it 1:1
+   onto the card with no shrink-to-fit border.
 2. Adjust scale, X/Y offset, brightness, saturation, gamma, contrast and
    sharpen. The preview re-renders through ImageMagick, so what you see is the
    actual file that will be sent. It is resampled with a Lanczos filter,
@@ -103,7 +104,7 @@ Set in `/etc/systemd/system/cardprint.service`, then
 | `CARDPRINT_PRINTER` | `Fargo-DTC-1250e` | CUPS queue name |
 | `CARDPRINT_PORT` | `8080` | HTTP port |
 | `CARDPRINT_HOST` | `0.0.0.0` | Bind address |
-| `CARDPRINT_CANVAS_W` / `_H` | `1110` / `638` | Calibrated canvas in pixels |
+| `CARDPRINT_CANVAS_W` / `_H` | `1008` / `633` | Canvas in px = CR80 imageable at 300 dpi (must keep the 242:152 aspect) |
 | `CARDPRINT_DENSITY_WARN` | `0.32` | Mean luminance below this warns |
 | `CARDPRINT_DATA` | `~/.local/share/cardprint` | Jobs, presets, history |
 | `CARDPRINT_CLEANUP_HOURS` | `24` | Working files removed after |
